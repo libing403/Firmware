@@ -75,7 +75,7 @@ struct LoggerSubscription {
 class Logger
 {
 public:
-	Logger(size_t buffer_size, unsigned log_interval, bool log_on_start,
+	Logger(size_t buffer_size, uint32_t log_interval, bool log_on_start,
 	       bool log_until_shutdown, bool log_name_timestamp);
 
 	~Logger();
@@ -85,7 +85,7 @@ public:
 	 * before starting the logger.
 	 * @param file_name file name of the used log replay file. Will be copied.
 	 */
-	static void setReplayFile(const char *file_name);
+	void setReplayFile(const char *file_name);
 
 	/**
 	 * Add a topic to be logged. This must be called before start_log()
@@ -233,8 +233,7 @@ private:
 	param_t						_log_utc_offset;
 	orb_advert_t					_mavlink_log_pub = nullptr;
 	uint16_t					_next_topic_id; ///< id of next subscribed topic
-
-	static char		*_replay_file_name;
+	char						*_replay_file_name = nullptr;
 };
 
 } //namespace logger
