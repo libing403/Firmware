@@ -165,15 +165,15 @@ MissionBlock::is_mission_item_reached()
 
 		if ((_mission_item.nav_cmd == NAV_CMD_TAKEOFF || _mission_item.nav_cmd == NAV_CMD_VTOL_TAKEOFF)
 			&& _navigator->get_vstatus()->is_rotary_wing) {
-			/* require only altitude for takeoff for multicopter, do not use waypoint acceptance radius */
+			/* require only altitude for takeoff for multicopter */
 			if (_navigator->get_global_position()->alt >
-				altitude_amsl - _navigator->get_acceptance_radius()) {
+					altitude_amsl - _navigator->get_altitude_acceptance_radius()) {
 				_waypoint_position_reached = true;
 			}
 		} else if (_mission_item.nav_cmd == NAV_CMD_TAKEOFF) {
 			/* for takeoff mission items use the parameter for the takeoff acceptance radius */
 			if (dist >= 0.0f && dist <= _navigator->get_acceptance_radius()
-				&& dist_z <= _navigator->get_default_acceptance_radius()) {
+				&& dist_z <= _navigator->get_altitude_acceptance_radius()) {
 				_waypoint_position_reached = true;
 			}
 		} else if (!_navigator->get_vstatus()->is_rotary_wing &&
@@ -186,7 +186,7 @@ MissionBlock::is_mission_item_reached()
 			 * radius (+ some margin). Time inside and turn count is handled elsewhere.
 			 */
 			if (dist >= 0.0f && dist <= _navigator->get_acceptance_radius(_mission_item.loiter_radius * 1.2f)
-				&& dist_z <= _navigator->get_default_acceptance_radius()) {
+				&& dist_z <= _navigator->get_altitude_acceptance_radius()) {
 
 				_waypoint_position_reached = true;
 			} else {
@@ -214,7 +214,7 @@ MissionBlock::is_mission_item_reached()
 								&dist_xy, &dist_z);
 
 				if (dist >= 0.0f && dist <= _navigator->get_acceptance_radius(_mission_item.loiter_radius * 1.2f)
-					&& dist_z <= _navigator->get_default_acceptance_radius()) {
+					&& dist_z <= _navigator->get_altitude_acceptance_radius()) {
 
 					// now set the loiter to the final altitude in the NAV_CMD_LOITER_TO_ALT mission item
 					curr_sp->alt = altitude_amsl;
@@ -223,7 +223,7 @@ MissionBlock::is_mission_item_reached()
 
 			} else {
 				if (dist >= 0.0f && dist <= _navigator->get_acceptance_radius(_mission_item.loiter_radius * 1.2f)
-					&& dist_z <= _navigator->get_default_acceptance_radius()) {
+					&& dist_z <= _navigator->get_altitude_acceptance_radius()) {
 
 					_waypoint_position_reached = true;
 
@@ -253,7 +253,7 @@ MissionBlock::is_mission_item_reached()
 			}
 
 			if (dist >= 0.0f && dist <= mission_acceptance_radius
-				&& dist_z <= _navigator->get_default_acceptance_radius()) {
+				&& dist_z <= _navigator->get_altitude_acceptance_radius()) {
 				_waypoint_position_reached = true;
 			}
 		}
@@ -277,14 +277,16 @@ MissionBlock::is_mission_item_reached()
 
 			/* accept yaw if reached or if timeout is set in which case we ignore not forced headings */
 			if (fabsf(yaw_err) < math::radians(_param_yaw_err.get())
-					|| (_param_yaw_timeout.get() >= FLT_EPSILON && !_mission_item.force_heading)) {
+				|| (_param_yaw_timeout.get() >= FLT_EPSILON && !_mission_item.force_heading)) {
+
 				_waypoint_yaw_reached = true;
 			}
 
 			/* if heading needs to be reached, the timeout is enabled and we don't make it, abort mission */
 			if (!_waypoint_yaw_reached && _mission_item.force_heading &&
-						_param_yaw_timeout.get() >= FLT_EPSILON &&
-						now - _time_wp_reached >= (hrt_abstime)_param_yaw_timeout.get() * 1e6f) {
+				(_param_yaw_timeout.get() >= FLT_EPSILON) &&
+				(now - _time_wp_reached >= (hrt_abstime)_param_yaw_timeout.get() * 1e6f)) {
+
 				_navigator->set_mission_failure("unable to reach heading within timeout");
 			}
 
@@ -404,6 +406,7 @@ MissionBlock::item_contains_position(const struct mission_item_s *item)
 		item->nav_cmd == NAV_CMD_DO_MOUNT_CONTROL ||
 		item->nav_cmd == NAV_CMD_DO_SET_CAM_TRIGG_DIST ||
 		item->nav_cmd == NAV_CMD_DO_VTOL_TRANSITION) {
+
 		return false;
 	}
 

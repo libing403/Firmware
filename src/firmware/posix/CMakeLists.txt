@@ -13,12 +13,12 @@ if ("${BOARD}" STREQUAL "eagle" OR ("${BOARD}" STREQUAL "excelsior"))
 
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-missing-prototypes -Wno-missing-declarations")
 	LINUX_APP(
-		APP_NAME mainapp
+		APP_NAME px4
 		IDL_NAME px4muorb
 		APPS_DEST "/home/linaro"
 		SOURCES
 			px4muorb_stub.c
-			${CMAKE_SOURCE_DIR}/src/platforms/posix/main.cpp
+			${PX4_SOURCE_DIR}/src/platforms/posix/main.cpp
 			apps.h
 		LINK_LIBS
 			-Wl,--start-group
@@ -32,19 +32,19 @@ if ("${BOARD}" STREQUAL "eagle" OR ("${BOARD}" STREQUAL "excelsior"))
 	px4_add_adb_push(OUT upload
 			 OS ${OS}
 			 BOARD ${BOARD}
-			 FILES ${CMAKE_CURRENT_BINARY_DIR}/mainapp
-				 ${CMAKE_SOURCE_DIR}/posix-configs/eagle/flight/mainapp.config
-			 DEPENDS mainapp
+			 FILES ${CMAKE_CURRENT_BINARY_DIR}/px4
+				 ${PX4_SOURCE_DIR}/posix-configs/eagle/flight/mainapp.config
+			 DEPENDS px4
 			 DEST /home/linaro)
 
 elseif ("${BOARD}" STREQUAL "rpi")
 
-	add_executable(mainapp
-		${CMAKE_SOURCE_DIR}/src/platforms/posix/main.cpp
+	add_executable(px4
+		${PX4_SOURCE_DIR}/src/platforms/posix/main.cpp
 		apps.h
 		)
 
-	target_link_libraries(mainapp
+	target_link_libraries(px4
 		-Wl,--start-group
 		${module_libraries}
 		df_driver_framework
@@ -56,9 +56,9 @@ elseif ("${BOARD}" STREQUAL "rpi")
 	px4_add_scp_push(OUT upload
 			 OS ${OS}
 			 BOARD ${BOARD}
-			 FILES ${CMAKE_CURRENT_BINARY_DIR}/mainapp
-				 ${CMAKE_SOURCE_DIR}/posix-configs/rpi/mainapp.config
-			 DEPENDS mainapp
+			 FILES ${CMAKE_CURRENT_BINARY_DIR}/px4
+				 ${PX4_SOURCE_DIR}/posix-configs/rpi/px4.config
+			 DEPENDS px4
 			 DEST /home/pi)
 
 elseif ("${BOARD}" STREQUAL "bebop")
@@ -66,13 +66,13 @@ elseif ("${BOARD}" STREQUAL "bebop")
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -static")
 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -static")
 
-	add_executable(mainapp
-		${CMAKE_SOURCE_DIR}/src/platforms/posix/main.cpp
+	add_executable(px4
+		${PX4_SOURCE_DIR}/src/platforms/posix/main.cpp
 		apps.h
 		)
 
 	if (NOT APPLE)
-		target_link_libraries(mainapp
+		target_link_libraries(px4
 			-Wl,--start-group
 			${module_libraries}
 			${df_driver_libs}
@@ -80,7 +80,7 @@ elseif ("${BOARD}" STREQUAL "bebop")
 			-Wl,--end-group
 			)
 	else()
-		target_link_libraries(mainapp
+		target_link_libraries(px4
 			${module_libraries}
 			${df_driver_libs}
 			pthread m
@@ -90,19 +90,19 @@ elseif ("${BOARD}" STREQUAL "bebop")
 	px4_add_adb_push_to_bebop(OUT upload
 			 OS ${OS}
 			 BOARD ${BOARD}
-			 FILES ${CMAKE_CURRENT_BINARY_DIR}/mainapp
-						 ${CMAKE_SOURCE_DIR}/posix-configs/bebop/mainapp.config
-			 DEPENDS mainapp
+			 FILES ${CMAKE_CURRENT_BINARY_DIR}/px4
+						 ${PX4_SOURCE_DIR}/posix-configs/bebop/px4.config
+			 DEPENDS px4
 			 DEST /usr/bin)
-			 
+
 else()
 
-	add_executable(mainapp
-		${CMAKE_SOURCE_DIR}/src/platforms/posix/main.cpp
+	add_executable(px4
+		${PX4_SOURCE_DIR}/src/platforms/posix/main.cpp
 		apps.h
 		)
 	if (NOT APPLE)
-		target_link_libraries(mainapp
+		target_link_libraries(px4
 			-Wl,--start-group
 			${module_libraries}
 			${df_driver_libs}
@@ -110,7 +110,7 @@ else()
 			-Wl,--end-group
 			)
 	else()
-		target_link_libraries(mainapp
+		target_link_libraries(px4
 			${module_libraries}
 			${df_driver_libs}
 			pthread m
@@ -120,11 +120,11 @@ endif()
 
 add_custom_target(run_config
 	COMMAND Tools/sitl_run.sh "${config_sitl_rcS}" "${config_sitl_debugger}"
-	"${config_sitl_viewer}" "${config_sitl_model}" "${CMAKE_BINARY_DIR}"
-	WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+	"${config_sitl_viewer}" "${config_sitl_model}" "${PX4_BINARY_DIR}"
+	WORKING_DIRECTORY ${PX4_SOURCE_DIR}
 	USES_TERMINAL
 	)
-add_dependencies(run_config mainapp)
+add_dependencies(run_config px4)
 
 foreach(viewer none jmavsim gazebo replay)
 	foreach(debugger none gdb lldb ddd valgrind)
@@ -145,13 +145,21 @@ foreach(viewer none jmavsim gazebo replay)
 			add_custom_target(${_targ_name}
 				COMMAND Tools/sitl_run.sh "${config_sitl_rcS}"
 				"${debugger}"
-				"${viewer}" "${model}" "${CMAKE_BINARY_DIR}"
-				WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+				"${viewer}" "${model}" "${PX4_BINARY_DIR}"
+				WORKING_DIRECTORY ${PX4_SOURCE_DIR}
 				USES_TERMINAL
 				)
-			add_dependencies(${_targ_name} mainapp)
+			add_dependencies(${_targ_name} px4)
 		endforeach()
 	endforeach()
 endforeach()
+
+#=============================================================================
+# install
+#
+
+install(TARGETS px4 DESTINATION bin)
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/ROMFS DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME})
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/posix-configs DESTINATION ${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME})
 
 # vim: set noet ft=cmake fenc=utf-8 ff=unix :

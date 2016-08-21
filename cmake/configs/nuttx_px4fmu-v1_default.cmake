@@ -1,6 +1,6 @@
 include(nuttx/px4_impl_nuttx)
 
-set(CMAKE_TOOLCHAIN_FILE ${CMAKE_SOURCE_DIR}/cmake/toolchains/Toolchain-arm-none-eabi.cmake)
+set(CMAKE_TOOLCHAIN_FILE ${PX4_SOURCE_DIR}/cmake/toolchains/Toolchain-arm-none-eabi.cmake)
 
 set(config_module_list
 	#
@@ -68,13 +68,11 @@ set(config_module_list
 	modules/land_detector
 
 	#
-	# Estimation modules (EKF/ SO3 / other filters)
+	# Estimation modules
 	#
-	# Too high RAM usage due to static allocations
-	# modules/attitude_estimator_ekf
 	modules/attitude_estimator_q
-	modules/ekf_att_pos_estimator
 	modules/position_estimator_inav
+	modules/local_position_estimator
 	modules/ekf2
 
 	#

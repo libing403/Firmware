@@ -125,6 +125,7 @@ MavlinkReceiver::MavlinkReceiver(Mavlink *parent) :
 	_time_offset_pub(nullptr),
 	_follow_target_pub(nullptr),
 	_transponder_report_pub(nullptr),
+	_gps_inject_data_pub(nullptr),
 	_control_mode_sub(orb_subscribe(ORB_ID(vehicle_control_mode))),
 	_hil_frames(0),
 	_old_timestamp(0),
@@ -143,9 +144,6 @@ MavlinkReceiver::MavlinkReceiver(Mavlink *parent) :
 	_mom_switch_pos{},
 	_mom_switch_state(0)
 {
-	for (int i = 0; i < _gps_inject_data_pub_size; ++i) {
-		_gps_inject_data_pub[i] = nullptr;
-	}
 }
 
 MavlinkReceiver::~MavlinkReceiver()
@@ -261,6 +259,10 @@ MavlinkReceiver::handle_message(mavlink_message_t *msg)
 
 	case MAVLINK_MSG_ID_BATTERY_STATUS:
 		handle_message_battery_status(msg);
+		break;
+
+	case MAVLINK_MSG_ID_SERIAL_CONTROL:
+		handle_message_serial_control(msg);
 		break;
 
 	default:
@@ -1191,6 +1193,32 @@ MavlinkReceiver::handle_message_battery_status(mavlink_message_t *msg)
 	}
 }
 
+void
+MavlinkReceiver::handle_message_serial_control(mavlink_message_t *msg)
+{
+	mavlink_serial_control_t serial_control_mavlink;
+	mavlink_msg_serial_control_decode(msg, &serial_control_mavlink);
+
+	// we only support shell commands
+	if (serial_control_mavlink.device != SERIAL_CONTROL_DEV_SHELL
+			|| (serial_control_mavlink.flags & SERIAL_CONTROL_FLAG_REPLY)) {
+		return;
+	}
+
+	MavlinkShell* shell = _mavlink->get_shell();
+	if (shell) {
+		// we ignore the timeout, EXCLUSIVE & BLOCKING flags of the SERIAL_CONTROL message
+		if (serial_control_mavlink.count > 0) {
+			shell->write(serial_control_mavlink.data, serial_control_mavlink.count);
+		}
+
+		// if no response requested, assume the shell is no longer used
+		if ((serial_control_mavlink.flags & SERIAL_CONTROL_FLAG_RESPOND) == 0) {
+			_mavlink->close_shell();
+		}
+	}
+}
+
 switch_pos_t
 MavlinkReceiver::decode_switch_pos(uint16_t buttons, unsigned sw)
 {
@@ -1843,18 +1871,15 @@ void MavlinkReceiver::handle_message_gps_rtcm_data(mavlink_message_t *msg)
 	memcpy(gps_inject_data_topic.data, gps_rtcm_data_msg.data,
 	       math::min((int)sizeof(gps_inject_data_topic.data), (int)sizeof(uint8_t) * gps_rtcm_data_msg.len));
 
-	orb_advert_t &pub = _gps_inject_data_pub[_gps_inject_data_next_idx];
+	orb_advert_t &pub = _gps_inject_data_pub;
 
 	if (pub == nullptr) {
-		int idx = _gps_inject_data_next_idx;
-		pub = orb_advertise_multi(ORB_ID(gps_inject_data), &gps_inject_data_topic,
-					  &idx, ORB_PRIO_DEFAULT);
+		pub = orb_advertise_queue(ORB_ID(gps_inject_data), &gps_inject_data_topic,
+					  _gps_inject_data_queue_size);
 
 	} else {
 		orb_publish(ORB_ID(gps_inject_data), pub, &gps_inject_data_topic);
 	}
-
-	_gps_inject_data_next_idx = (_gps_inject_data_next_idx + 1) % _gps_inject_data_pub_size;
 
 }
 

@@ -36,10 +36,8 @@ set(config_module_list
 	systemcmds/perf
 
 	#
-	# Estimation modules (EKF/ SO3 / other filters)
+	# Estimation modules
 	#
-	#modules/attitude_estimator_ekf
-	modules/ekf_att_pos_estimator
 	modules/attitude_estimator_q
 	modules/position_estimator_inav
 	modules/local_position_estimator
@@ -60,7 +58,6 @@ set(config_module_list
 	modules/sdlog2
 	modules/logger
 	modules/commander
-	modules/load_mon
 	modules/param
 	modules/systemlib
 	modules/systemlib/mixer
@@ -76,6 +73,8 @@ set(config_module_list
 	drivers/gps
 	drivers/navio_sysfs_rc_in
 	drivers/navio_sysfs_pwm_out
+	drivers/navio_gpio
+	drivers/navio_rgbled
 
 	#
 	# Libraries

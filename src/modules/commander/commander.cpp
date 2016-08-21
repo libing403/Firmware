@@ -76,6 +76,7 @@
 #include <systemlib/rc_check.h>
 #include <systemlib/state_table.h>
 #include <systemlib/systemlib.h>
+#include <systemlib/hysteresis/hysteresis.h>
 #include <uORB/topics/actuator_armed.h>
 #include <uORB/topics/actuator_controls.h>
 #include <uORB/topics/battery_status.h>
@@ -167,7 +168,8 @@ static hrt_abstime commander_boot_timestamp = 0;
 static unsigned int leds_counter;
 /* To remember when last notification was sent */
 static uint64_t last_print_mode_reject_time = 0;
-static uint64_t _inair_last_time = 0;
+
+static systemlib::Hysteresis auto_disarm_hysteresis(false);
 
 static float eph_threshold = 5.0f;
 static float epv_threshold = 10.0f;
@@ -1082,6 +1084,7 @@ bool handle_command(struct vehicle_status_s *status_local, const struct safety_s
 	case vehicle_command_s::VEHICLE_CMD_DO_SET_CAM_TRIGG_DIST:
 	case vehicle_command_s::VEHICLE_CMD_DO_MOUNT_CONTROL_QUAT:
 	case vehicle_command_s::VEHICLE_CMD_DO_CHANGE_SPEED:
+	case vehicle_command_s::VEHICLE_CMD_DO_GO_AROUND:
 	case vehicle_command_s::VEHICLE_CMD_START_RX_PAIR:
 		/* ignore commands that handled in low prio loop */
 		break;
@@ -1646,6 +1649,9 @@ int commander_thread_main(int argc, char *argv[])
 			param_get(_param_ef_time_thres, &ef_time_thres);
 			param_get(_param_geofence_action, &geofence_action);
 			param_get(_param_disarm_land, &disarm_when_landed);
+			auto_disarm_hysteresis.set_hysteresis_time_from(false,
+									(hrt_abstime)disarm_when_landed * 1000000);
+
 			param_get(_param_low_bat_act, &low_bat_action);
 			param_get(_param_offboard_loss_timeout, &offboard_loss_timeout);
 			param_get(_param_offboard_loss_act, &offboard_loss_act);
@@ -2011,20 +2017,20 @@ int commander_thread_main(int argc, char *argv[])
 				}
 			}
 
-			if (disarm_when_landed > 0) {
-				if (land_detector.landed) {
-					if (_inair_last_time > 0 &&
-					    (hrt_elapsed_time(&_inair_last_time) > (hrt_abstime)disarm_when_landed * 1000 * 1000)) {
-						arm_disarm(false, &mavlink_log_pub, "auto disarm on land");
-						_inair_last_time = 0;
-					}
-				} else {
-					_inair_last_time = land_detector.timestamp;
-				}
-			}
 
 			was_landed = land_detector.landed;
 			was_falling = land_detector.freefall;
+		}
+
+		// Check for auto-disarm
+		if (armed.armed && land_detector.landed && disarm_when_landed > 0) {
+			auto_disarm_hysteresis.set_state_and_update(true);
+		} else {
+			auto_disarm_hysteresis.set_state_and_update(false);
+		}
+
+		if (auto_disarm_hysteresis.get_state()) {
+			arm_disarm(false, &mavlink_log_pub, "auto disarm on land");
 		}
 
 		if (!rtl_on) {
@@ -2923,13 +2929,20 @@ check_valid(hrt_abstime timestamp, hrt_abstime timeout, bool valid_in, bool *val
 void
 control_status_leds(vehicle_status_s *status_local, const actuator_armed_s *actuator_armed, bool changed, battery_status_s *battery_local, const cpuload_s *cpuload_local)
 {
+	bool overload = (cpuload_local->load > 0.75f) || (cpuload_local->ram_usage > 0.98f);
+
 	/* driving rgbled */
 	if (changed) {
 		bool set_normal_color = false;
 		bool hotplug_timeout = hrt_elapsed_time(&commander_boot_timestamp) > HOTPLUG_SENS_TIMEOUT;
 
 		/* set mode */
-		if (status_local->arming_state == vehicle_status_s::ARMING_STATE_ARMED) {
+		if (overload) {
+			rgbled_set_mode(RGBLED_MODE_BLINK_FAST);
+			rgbled_set_color(RGBLED_COLOR_PURPLE);
+			set_normal_color = false;
+
+		} else if (status_local->arming_state == vehicle_status_s::ARMING_STATE_ARMED) {
 			rgbled_set_mode(RGBLED_MODE_ON);
 			set_normal_color = true;
 
@@ -2991,8 +3004,8 @@ control_status_leds(vehicle_status_s *status_local, const actuator_armed_s *actu
 
 #endif
 
-	/* give system warnings on error LED, XXX maybe add memory usage warning too */
-	if (cpuload_local->load > 0.95f) {
+	/* give system warnings on error LED */
+	if (overload) {
 		if (leds_counter % 2 == 0) {
 			led_toggle(LED_AMBER);
 		}
